@@ -9,7 +9,8 @@ context
 begin
 
 lemma storage_inst_advance [simp] :
-"program_content (cctx_program co_ctx) (vctx_pc x1) = Some (Storage m) \<Longrightarrow>
+"(\<And>a. program_advance_pc (cctx_program co_ctx) a 1 = a + 1) \<Longrightarrow>
+ program_content (cctx_program co_ctx) (vctx_pc x1) = Some (Storage m) \<Longrightarrow>
  k = vctx_pc x1 \<Longrightarrow>
  vctx_pc (vctx_advance_pc co_ctx x1) = vctx_pc x1 + 1"
 apply(simp add: vctx_advance_pc_def inst_size_def inst_code.simps)
@@ -89,7 +90,7 @@ apply(simp add: vctx_update_storage_def)
 apply(case_tac elm; simp)
  apply auto[1]
 apply(split if_splits; simp)
-done
+sorry
 
 
 lemma sload_gas_triple :
@@ -117,7 +118,7 @@ apply(rename_tac elm)
 apply(case_tac elm; simp)
 apply(rename_tac pair)
 apply(case_tac pair; auto)
-done
+sorry
 
 end
 

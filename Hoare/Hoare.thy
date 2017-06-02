@@ -538,6 +538,11 @@ lemma sep_program_counter_sep [simp] : "(a ** program_counter w ** rest) s =
   apply (simp only: program_counter_sep sep_conj_commute)
 done
 
+lemma leibniz :
+  "r (s :: 'a state_element set) \<Longrightarrow> s = t \<Longrightarrow> r t"
+apply(auto)
+done
+
 lemma code_sep [simp] : "(code pairs ** rest) s =
   ({ CodeElm(pos, i) | pos i. (pos, i) \<in> pairs } \<subseteq> s \<and> (rest (s - { CodeElm(pos, i) | pos i. (pos, i) \<in> pairs })))"
   apply (rule iffI)
