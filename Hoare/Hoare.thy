@@ -351,6 +351,31 @@ definition action :: "contract_action \<Rightarrow> state_element set \<Rightarr
 where
 "action act s == s = {ContractActionElm act}"
 
+(* sent_value and sent_data *)
+
+definition sent_value :: " w256 \<Rightarrow> state_element set \<Rightarrow> bool"
+where
+"sent_value w s == s = {SentValueElm w}"
+
+definition sent_data :: "nat * byte \<Rightarrow> state_element set \<Rightarrow> bool"
+where
+"sent_data d s == s = {SentDataElm d}"
+
+definition sent_data_length :: "nat \<Rightarrow> state_element set \<Rightarrow> bool"
+where
+"sent_data_length n s == s = {SentDataLengthElm n}"
+
+fun data_lst :: "nat \<Rightarrow> 8 word list \<Rightarrow> state_element set \<Rightarrow> bool" where
+"data_lst n [] = emp"
+| "data_lst n (x#xs) = (\<lambda>s. (sent_data (n,x) \<and>* data_lst (Suc n) xs) s)"
+declare data_lst.simps [simp del]
+
+fun sent_data_elms :: "nat \<Rightarrow> byte list \<Rightarrow> state_element set"
+where
+  "sent_data_elms begin [] = {}"
+| "sent_data_elms begin (a # lst) = {SentDataElm (begin, a)} \<union> sent_data_elms (begin + 1) lst"
+
+
 (* memory8, memory, calldata, and storage should be added here *)
 
 definition memory8 :: "w256 \<Rightarrow> byte \<Rightarrow> state_element set \<Rightarrow> bool"
@@ -453,6 +478,11 @@ done
 definition code :: "(int * inst) set \<Rightarrow> state_element set \<Rightarrow> bool"
   where
     "code f s == s = { CodeElm(pos, i) | pos i. (pos, i) \<in> f }"
+
+fun code_range :: "int \<Rightarrow> inst list \<Rightarrow> state_element set \<Rightarrow> bool" where
+  "code_range n [] = emp"
+| "code_range n (x#xs) = (code {(n,x)} \<and>* code_range (n+inst_size x) xs)"
+declare code_range.simps [simp del]
 
 axiomatization hash2 :: "w256 \<Rightarrow> w256 \<Rightarrow> w256" where
 hash_inj :
@@ -631,6 +661,53 @@ lemma sep_memory_usage_sep [simp] :
    (MemoryUsageElm u \<in> s \<and> (a ** rest) (s - {MemoryUsageElm u}))"
 	by (metis memory_usage_sep sep_conj_commute sep_conj_assoc)
 
+lemma sent_value_sep :
+  "(sent_value u \<and>* b) s =
+   (SentValueElm u \<in> s \<and> b (s - {SentValueElm u}))"
+  by (solve_sep_iff simp: sent_value_def)
+
+lemma sent_data_sep :
+  "(sent_data u \<and>* b) s =
+   (SentDataElm u \<in> s \<and> b (s - {SentDataElm u}))"
+  by (solve_sep_iff simp: sent_data_def)
+
+lemma data_lst_sep :
+  "(data_lst u lst \<and>* b) s =
+   ({SentDataElm (pos,i) | pos i. index lst (u+pos) = Some i} \<subseteq> s \<and> b (s - sent_data_elms u lst))"
+apply(induction lst arbitrary: u b s)
+ apply(simp add: data_lst.simps)
+apply(simp add: data_lst.simps)
+apply(rule iffI)
+ apply(auto simp add: sent_data_sep)
+oops
+lemma sent_data_length_sep :
+  "(sent_data_length u \<and>* b) s =
+   (SentDataLengthElm u \<in> s \<and> b (s - {SentDataLengthElm u}))"
+  by (solve_sep_iff simp: sent_data_length_def)
+
+lemma sentDataLengthEquiv [simp]:
+  "SentDataLengthElm u \<in> contexts_as_set v c = (length (vctx_data_sent v) = u)"
+apply(auto simp add: contexts_as_set_def constant_ctx_as_set_def variable_ctx_as_set_def
+      program_as_set_def stack_as_set_def memory_as_set_def storage_as_set_def
+      balance_as_set_def log_as_set_def data_sent_as_set_def ext_program_as_set_def)
+done
+
+lemma sentDataEquiv [simp] : "SentDataElm (pos, w) \<in> contexts_as_set v c =
+  (pos < length (vctx_data_sent v) \<and> (vctx_data_sent v) ! pos = w)"
+apply(auto simp add: contexts_as_set_def constant_ctx_as_set_def variable_ctx_as_set_def
+      program_as_set_def stack_as_set_def memory_as_set_def storage_as_set_def
+      balance_as_set_def log_as_set_def data_sent_as_set_def ext_program_as_set_def)
+done
+
+lemma sentDatalstEquiv [simp] :
+  "{data_lst}"
+
+lemma sentValueEquiv [simp]:
+  "SentValueElm u \<in> contexts_as_set v c = (vctx_value_sent v = u)"
+apply(auto simp add: contexts_as_set_def constant_ctx_as_set_def variable_ctx_as_set_def
+      program_as_set_def stack_as_set_def memory_as_set_def storage_as_set_def
+      balance_as_set_def log_as_set_def data_sent_as_set_def ext_program_as_set_def)
+done
 
 lemma stackHeightElmEquiv [simp] : "StackHeightElm h \<in> contexts_as_set v c =
   (length (vctx_stack v) = h)

@@ -101,6 +101,7 @@ caller_sep  balance_sep not_continuing_sep this_account_sep
 action_sep memory8_sep memory_usage_sep pure_sep code_sep gas_pred_sep
 memory_range_sep continuing_sep gas_any_sep program_counter_sep
 stack_height_sep stack_sep block_number_pred_sep storage_sep emp_sep
+sent_value_sep sent_data_sep sent_data_length_sep
 
 lemmas sep_fun_simps =
 fun_sep_simps
@@ -371,6 +372,68 @@ method set_solve_case_w =
    apply blast
   apply(clarsimp)
  apply(case_tac "w=0"; simp)*)
+
+lemma inst_return :
+notes if_split[split del]
+shows
+  "triple_inst_sem
+    (\<langle> h \<le> 1024 \<and> 0 \<le> g \<and> m \<ge> 0 \<rangle> \<and>* continuing \<and>* memory_usage m \<and>*
+     program_counter n \<and>* stack_height h \<and>* gas_pred g \<and>* 
+     (if h \<ge> 2 then \<langle> length lst = unat v \<rangle> \<and>* stack (h-1) u \<and>* stack (h-2) v \<and>* memory_range u lst else emp) \<and>*
+     rest)
+    (n, Misc RETURN)
+    (stack_height h \<and>* not_continuing \<and>* memory_usage m \<and>*
+     action (ContractReturn (if h \<ge> 2 then lst else [])) \<and>*
+     (if h \<ge> 2 then stack (h-1) u \<and>* stack (h-2) v \<and>* memory_range u lst else emp) \<and>*
+     program_counter n \<and>* gas_pred g \<and>* rest)"
+apply(case_tac "h \<ge> 2"; clarsimp)
+apply(simp add: triple_inst_sem_def program_sem.simps as_set_simps sep_conj_ac)
+apply(clarify)
+apply(sep_simp simp: fun_sep_simps; simp)+
+defer
+apply(sep_simp simp: fun_sep_simps)+
+defer
+apply(sep_simp simp: fun_sep_simps; simp, (erule conjE)?)+
+apply(simp split: instruction_result.splits)
+apply(simp add: vctx_next_instruction_def)
+apply(clarsimp simp add: instruction_simps)
+oops
+
+find_theorems gas_pred -name: HoareTripleForInstructions3 constant_ctx_as_set
+lemma inst_calldataload :
+  "triple_inst_sem
+    (\<langle> h \<le> 1023 \<and> Gverylow \<le> g \<and> m \<ge> 0\<rangle> \<and>*
+     continuing \<and>* memory_usage m \<and>* program_counter n \<and>* data_lst 0 lst \<and>*
+     stack_height (Suc h) \<and>* stack h u \<and>* gas_pred g \<and>* rest)
+    (n, Stack CALLDATALOAD)
+    (program_counter (n + 1) \<and>* continuing \<and>* data_lst 0 lst \<and>*
+     memory_usage m \<and>* stack_height (Suc h) \<and>*
+     stack h (read_word_from_bytes (unat u) lst) \<and>*
+     gas_pred (g - Gverylow) \<and>* rest)"
+apply(simp add: triple_inst_sem_def program_sem.simps as_set_simps sep_conj_ac)
+apply(clarify)
+apply(sep_simp simp: fun_sep_simps; simp)+
+apply(simp split: instruction_result.splits)
+apply(simp add: vctx_next_instruction_def)
+apply(clarsimp simp add: instruction_simps)
+apply(rule conjI)
+ apply(erule_tac P="_ \<and>* _" in back_subst)
+ defer
+apply(simp add: cut_data_def)
+
+(* lemma inst_callvalue_sound:
+    "triple_inst_sem
+      (\<langle> h \<le> 1023 \<and> Gbase \<le> g \<and> m \<ge> 0\<rangle> \<and>*
+       continuing \<and>* program_counter n \<and>*
+       memory_usage m \<and>* stack_height h \<and>* sent_value w \<and>*
+       gas_pred g \<and>* rest)
+      (n, Info CALLVALUE)
+      (program_counter (n + 1) \<and>*
+       continuing \<and>* memory_usage m \<and>* sent_value w \<and>*
+       stack_height (Suc h) \<and>* gas_pred (g - Gbase) \<and>*
+       stack h w \<and>* rest)"
+apply(inst_sound_basic)
+done *)
 
 lemma inst_arith_2_1_low_sound:
 notes
