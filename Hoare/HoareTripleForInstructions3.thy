@@ -207,15 +207,15 @@ inductive triple_inst_misc :: "pred \<Rightarrow> pos_inst \<Rightarrow> pred \<
        gas_pred g \<and>* rest)"
 |inst_return :
     "triple_inst_misc
-      (\<langle> h \<le> 1024 \<and> 0 \<le> g \<and> m \<ge> 0 \<and> length lst = unat v\<rangle> \<and>* continuing \<and>* memory_usage m \<and>*
-       program_counter n \<and>* stack_height h \<and>* gas_pred g \<and>* 
-       (if h \<ge> 2 then stack (h-1) u \<and>* stack (h-2) v \<and>* memory_range u lst else emp) \<and>*
-       rest)
-      (n, Misc RETURN)
-      (stack_height h \<and>* not_continuing \<and>* memory_usage m \<and>*
-       action (ContractReturn (if h \<ge> 2 then lst else [])) \<and>*
-       (if h \<ge> 2 then stack (h-1) u \<and>* stack (h-2) v \<and>* memory_range u lst else emp) \<and>*
-       program_counter n \<and>* gas_pred g \<and>* rest)"
+     (\<langle> h \<le> 1022 \<and> m \<ge> 0 \<and> length lst = unat v \<and> (Cmem (M m u v) - Cmem m) \<le> g \<rangle> \<and>*
+      continuing \<and>* memory_usage m \<and>* memory_range u lst \<and>*
+      program_counter n \<and>* stack_height (Suc (Suc h)) \<and>* gas_pred g \<and>*
+      stack (Suc h) u \<and>* stack h v \<and>* rest)
+     (n, Misc RETURN)
+     (stack_height (Suc (Suc h)) \<and>* not_continuing \<and>* memory_usage (M m u v) \<and>*
+      action (ContractReturn lst) \<and>* gas_pred (g - (Cmem (M m u v) - Cmem m)) \<and>*
+      stack (Suc h) u \<and>* stack h v \<and>* memory_range u lst \<and>*
+      program_counter n \<and>* rest)"
 
 definition memory :: "w256 \<Rightarrow> w256 \<Rightarrow> state_element set_pred" where
 "memory ind w = memory_range ind (word_rsplit w)"

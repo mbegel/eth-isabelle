@@ -374,30 +374,44 @@ method set_solve_case_w =
  apply(case_tac "w=0"; simp)*)
 
 lemma inst_return :
-notes if_split[split del]
+notes
+  if_split[split del]
+  sep_lc[simp del]
 shows
   "triple_inst_sem
-    (\<langle> h \<le> 1024 \<and> 0 \<le> g \<and> m \<ge> 0 \<rangle> \<and>* continuing \<and>* memory_usage m \<and>*
-     program_counter n \<and>* stack_height h \<and>* gas_pred g \<and>* 
-     (if h \<ge> 2 then \<langle> length lst = unat v \<rangle> \<and>* stack (h-1) u \<and>* stack (h-2) v \<and>* memory_range u lst else emp) \<and>*
-     rest)
+    (\<langle> h \<le> 1022 \<and> m \<ge> 0 \<and> length lst = unat v \<and> (Cmem (M m u v) - Cmem m) \<le> g \<rangle> \<and>*
+     continuing \<and>* memory_usage m \<and>* memory_range u lst \<and>*
+     program_counter n \<and>* stack_height (Suc (Suc h)) \<and>* gas_pred g \<and>*
+     stack (Suc h) u \<and>* stack h v \<and>* rest)
     (n, Misc RETURN)
-    (stack_height h \<and>* not_continuing \<and>* memory_usage m \<and>*
-     action (ContractReturn (if h \<ge> 2 then lst else [])) \<and>*
-     (if h \<ge> 2 then stack (h-1) u \<and>* stack (h-2) v \<and>* memory_range u lst else emp) \<and>*
-     program_counter n \<and>* gas_pred g \<and>* rest)"
-apply(case_tac "h \<ge> 2"; clarsimp)
-apply(simp add: triple_inst_sem_def program_sem.simps as_set_simps sep_conj_ac)
-apply(clarify)
-apply(sep_simp simp: fun_sep_simps; simp)+
-defer
-apply(sep_simp simp: fun_sep_simps)+
-defer
-apply(sep_simp simp: fun_sep_simps; simp, (erule conjE)?)+
-apply(simp split: instruction_result.splits)
-apply(simp add: vctx_next_instruction_def)
-apply(clarsimp simp add: instruction_simps)
-oops
+    (stack_height (Suc (Suc h)) \<and>* not_continuing \<and>* memory_usage (M m u v) \<and>*
+     action (ContractReturn lst) \<and>* gas_pred (g - (Cmem (M m u v) - Cmem m)) \<and>*
+     stack (Suc h) u \<and>* stack h v \<and>* memory_range u lst \<and>*
+     program_counter n \<and>* rest)"
+ apply(simp add: triple_inst_sem_def)
+ apply(simp add: program_sem.simps)
+ apply(clarify)
+ apply(case_tac presult; clarsimp)
+   defer
+   apply(simp add: as_set_simps)
+   apply(sep_simp simp: continuing_sep; clarsimp)
+  apply(simp add: as_set_simps)
+  apply(sep_simp simp: continuing_sep; clarsimp)
+ defer
+ apply(sep_simp simp: pure_sep, erule conjE)
+ apply(sep_simp simp: fun_sep_simps, simp?, (erule conjE)?)+
+ apply(simp add: instruction_simps vctx_returned_bytes_def del: Cmem_def M_def)
+ apply(simp add: vctx_stack_default_def)
+ apply(clarify)
+ apply(clarsimp)
+ apply(simp add: instruction_simps ret_def del: Cmem_def M_def)
+ apply(simp add: instruction_result_as_set_def)
+ apply(simp add: instruction_simps vctx_returned_bytes_def del: Cmem_def M_def)
+ apply(rule conjI)
+  apply(erule_tac P="(_ \<and>* _)" in back_subst)
+  apply(auto simp add: as_set_simps )[1]
+ apply(auto simp add: as_set_simps )[1]
+done
 
 find_theorems gas_pred -name: HoareTripleForInstructions3 constant_ctx_as_set
 lemma inst_calldataload :
