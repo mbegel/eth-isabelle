@@ -413,23 +413,77 @@ shows
  apply(auto simp add: as_set_simps )[1]
 done
 
+lemma sent_data_elms_notin:
+"m > n \<Longrightarrow> SentDataElm (n,d) \<notin> sent_data_elms m lst"
+apply(induction lst arbitrary: m; simp)
+done
+
+lemma
+"(sent_data_elms (Suc k) lst \<subseteq> s - {SentDataElm (k, a)}) =
+(sent_data_elms (Suc k) lst \<subseteq> s)"
+apply(auto simp add: sent_data_elms_notin)
+
+lemma data_lst_sep:
+notes
+  sent_data_elms.simps[simp del]
+shows
+"(data_lst k lst \<and>* rest) s =
+ (sent_data_elms k lst \<subseteq> s \<and> rest (s - (sent_data_elms k lst)))"
+apply(induction lst arbitrary: k s)
+ apply(simp add: data_lst.simps sent_data_elms.simps)
+apply(simp add: data_lst.simps)
+apply(drule_tac x="Suc k" and y="s - {SentDataElm (k, a)}" in meta_spec2)
+apply(rule iffI)
+ apply(erule iffE)
+ apply(sep_simp simp: sent_data_sep)
+ apply(clarsimp)
+ apply(simp add: sent_data_elms.simps)
+ apply(rule conjI)
+  apply(auto)[1]
+ apply(subst Diff_insert2, assumption)
+apply(sep_simp simp: sent_data_sep)
+apply(simp add: sent_data_elms.simps)
+apply(rule conjI)
+ apply(auto simp add: sent_data_elms_notin)[1]
+apply(erule conjE)+
+apply(erule back_subst[where P=rest])
+apply(rule Diff_insert2)
+done
+
+lemma sent_data_means:
+ "sent_data_elms k lst \<subseteq> insert (ContinuingElm True) (contexts_as_set v c) \<Longrightarrow>
+  length (vctx_data_sent v) = k + length lst \<Longrightarrow>
+  drop k (vctx_data_sent v) = lst"
+apply(induction lst arbitrary: k; simp)
+apply(drule_tac x="Suc k" in meta_spec)
+apply(simp add: drop_cons)
+done
+
 find_theorems gas_pred -name: HoareTripleForInstructions3 constant_ctx_as_set
 lemma inst_calldataload :
   "triple_inst_sem
-    (\<langle> h \<le> 1023 \<and> Gverylow \<le> g \<and> m \<ge> 0\<rangle> \<and>*
+    (\<langle> h \<le> 1023 \<and> Gverylow \<le> g \<and> m \<ge> 0 \<and> k = length lst\<rangle> \<and>* sent_data_length k \<and>*
      continuing \<and>* memory_usage m \<and>* program_counter n \<and>* data_lst 0 lst \<and>*
      stack_height (Suc h) \<and>* stack h u \<and>* gas_pred g \<and>* rest)
     (n, Stack CALLDATALOAD)
     (program_counter (n + 1) \<and>* continuing \<and>* data_lst 0 lst \<and>*
-     memory_usage m \<and>* stack_height (Suc h) \<and>*
+     memory_usage m \<and>* stack_height (Suc h) \<and>* sent_data_length k \<and>*
      stack h (read_word_from_bytes (unat u) lst) \<and>*
      gas_pred (g - Gverylow) \<and>* rest)"
 apply(simp add: triple_inst_sem_def program_sem.simps as_set_simps sep_conj_ac)
 apply(clarify)
+apply((simp (*asm_lr*) only: sep_conj_assoc)?)
+apply(((sep_select_asm 8, subst (asm) data_lst_sep, (erule conjE)?)))
+apply(sep_select_asm 8)
+apply(sep_simp simp: data_lst_sep)
 apply(sep_simp simp: fun_sep_simps; simp)+
 apply(simp split: instruction_result.splits)
 apply(simp add: vctx_next_instruction_def)
-apply(clarsimp simp add: instruction_simps)
+apply(clarsimp simp add: instruction_simps simp del: M_def Cmem_def)
+apply(simp add: cut_data_def)
+apply(drule sent_data_means)
+ apply(arith)
+apply(simp)
 apply(rule conjI)
  apply(erule_tac P="_ \<and>* _" in back_subst)
  defer
