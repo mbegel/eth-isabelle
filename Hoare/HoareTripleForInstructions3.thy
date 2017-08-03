@@ -239,17 +239,20 @@ definition code_range_minus_current_inst :: "int \<Rightarrow> inst list \<Right
 inductive triple_inst_memory :: "pred \<Rightarrow> pos_inst \<Rightarrow> pred \<Rightarrow> bool" where
  inst_mload :
     "triple_inst_memory
-      (\<langle> h \<le> 1023  \<and> g \<ge> Gverylow + Cmem memu - Cmem (M memu memaddr 32) \<and> memu \<ge> 0 \<rangle> \<and>*
+      (\<langle> h \<le> 1023  \<and> g \<ge> Gverylow - Cmem memu + Cmem (M memu memaddr 32) \<and> memu \<ge> 0 \<and>
+        length (word_rsplit v::byte list) = unat (32::w256)\<rangle> \<and>*
        stack h memaddr \<and>* stack_height (h+1) \<and>* program_counter n \<and>*   
        memory_usage memu \<and>* memory memaddr v \<and>* gas_pred g \<and>* continuing \<and>* rest)
-     (n, Memory MLOAD)
-    (program_counter (n + 1) \<and>* stack_height (h + 1) \<and>* stack h v \<and>*
-     memory memaddr v \<and>* memory_usage (M memu memaddr 32) \<and>*
-     gas_pred (g - Gverylow + Cmem memu - Cmem (M memu memaddr 32)) \<and>*
-     continuing \<and>* rest)"
+      (n, Memory MLOAD)
+      (program_counter (n + 1) \<and>* stack_height (h + 1) \<and>* stack h v \<and>*
+       memory memaddr v \<and>* memory_usage (M memu memaddr 32) \<and>*
+       gas_pred (g - Gverylow + Cmem memu - Cmem (M memu memaddr 32)) \<and>*
+       continuing \<and>* rest)"
 | inst_mstore :
     "triple_inst_memory
-      (\<langle> h \<le> 1022 \<and> g \<ge> Gverylow - Cmem memu + Cmem (M memu memaddr 32) \<and> memu \<ge> 0\<rangle> \<and>*
+      (\<langle> h \<le> 1022 \<and> g \<ge> Gverylow - Cmem memu + Cmem (M memu memaddr 32) \<and> memu \<ge> 0 \<and>
+        length (word_rsplit old_v::byte list) = unat (32::w256) \<and>
+        length (word_rsplit v::byte list) = unat (32::w256)\<rangle> \<and>*
        stack (h+1) memaddr \<and>* stack h v \<and>* stack_height (h+2) \<and>*
        program_counter n \<and>* memory_usage memu \<and>*
        memory memaddr old_v \<and>* gas_pred g \<and>* continuing \<and>* rest)

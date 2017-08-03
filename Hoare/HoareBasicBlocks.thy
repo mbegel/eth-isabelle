@@ -373,7 +373,7 @@ method set_solve_case_w =
   apply(clarsimp)
  apply(case_tac "w=0"; simp)*)
 
-lemma inst_return :
+lemma inst_return_sem :
 notes
   if_split[split del]
   sep_lc[simp del]
@@ -418,11 +418,6 @@ lemma sent_data_elms_notin:
 apply(induction lst arbitrary: m; simp)
 done
 
-lemma
-"(sent_data_elms (Suc k) lst \<subseteq> s - {SentDataElm (k, a)}) =
-(sent_data_elms (Suc k) lst \<subseteq> s)"
-apply(auto simp add: sent_data_elms_notin)
-
 lemma data_lst_sep:
 notes
   sent_data_elms.simps[simp del]
@@ -451,7 +446,7 @@ apply(rule Diff_insert2)
 done
 
 lemma sent_data_means:
- "sent_data_elms k lst \<subseteq> insert (ContinuingElm True) (contexts_as_set v c) \<Longrightarrow>
+ "sent_data_elms k lst \<subseteq> (contexts_as_set v c) \<Longrightarrow>
   length (vctx_data_sent v) = k + length lst \<Longrightarrow>
   drop k (vctx_data_sent v) = lst"
 apply(induction lst arbitrary: k; simp)
@@ -459,8 +454,70 @@ apply(drule_tac x="Suc k" in meta_spec)
 apply(simp add: drop_cons)
 done
 
-find_theorems gas_pred -name: HoareTripleForInstructions3 constant_ctx_as_set
-lemma inst_calldataload :
+lemma not_in_data_sent:
+"\<forall>a b. elm \<noteq> SentDataElm (a,b) \<Longrightarrow> elm \<notin> sent_data_elms k lst"
+by(induction lst arbitrary: k; simp)
+
+lemma sent_data_in_sent_data_elms:
+"elm \<in> sent_data_elms k lst \<Longrightarrow> \<exists>a b. elm = SentDataElm (a,b)"
+apply(induction lst arbitrary: k; simp)
+apply(erule disjE; simp)
+done
+
+lemma sent_data_elms_not_in_insert:
+"\<forall>a b. elm \<noteq> SentDataElm (a,b) \<Longrightarrow>
+(sent_data_elms k lst \<subseteq> insert elm S) =
+(sent_data_elms k lst \<subseteq> S)"
+by(auto simp add: not_in_data_sent)
+
+lemma sent_data_elms_not_in_minus:
+"\<forall>a b. elm \<noteq> SentDataElm (a,b) \<Longrightarrow>
+(sent_data_elms k lst \<subseteq> S - {elm}) =
+(sent_data_elms k lst \<subseteq> S)"
+by(auto simp add: not_in_data_sent)
+
+lemma not_in_stack_as_set:
+"\<forall>a b c. elm \<noteq> StackElm (a,b) \<and> elm \<noteq> StackHeightElm c \<Longrightarrow> elm \<notin> stack_as_set u"
+by(simp add: stack_as_set_def)
+
+lemma sent_data_elms_not_in_stack:
+"(sent_data_elms k lst \<subseteq> S - stack_as_set u) =
+ (sent_data_elms k lst \<subseteq> S)"
+apply(rule iffI)
+ apply(auto)[1]
+apply(rule subsetI)
+apply(simp)
+apply(rule conjI)
+ apply(erule subsetD, assumption)
+apply(drule sent_data_in_sent_data_elms)
+apply(clarsimp)
+done
+
+lemma sent_data_elms_not_in_stack':
+"(sent_data_elms k lst \<subseteq> S \<union> stack_as_set u) =
+ (sent_data_elms k lst \<subseteq> S)"
+apply(rule iffI)
+ apply(rule subsetI)
+ apply(subgoal_tac "x \<notin> stack_as_set u")
+  apply(auto)[1]
+ apply(drule sent_data_in_sent_data_elms)
+ apply(clarsimp)
+apply(auto)[1]
+done
+
+lemma contexts_as_set_pc_change:
+"contexts_as_set (v\<lparr>vctx_pc := vctx_pc v + 1 \<rparr>) c = insert (PcElm (vctx_pc v + 1)) (contexts_as_set v c - {PcElm (vctx_pc v)})"
+by(auto simp add: as_set_simps)
+
+lemmas sent_data_simps =
+sent_data_elms_not_in_stack
+sent_data_elms_not_in_stack'
+sent_data_elms_not_in_minus
+sent_data_elms_not_in_insert
+sent_data_in_sent_data_elms
+not_in_data_sent
+
+lemma inst_calldataload_sem :
   "triple_inst_sem
     (\<langle> h \<le> 1023 \<and> Gverylow \<le> g \<and> m \<ge> 0 \<and> k = length lst\<rangle> \<and>* sent_data_length k \<and>*
      continuing \<and>* memory_usage m \<and>* program_counter n \<and>* data_lst 0 lst \<and>*
@@ -481,27 +538,13 @@ apply(simp split: instruction_result.splits)
 apply(simp add: vctx_next_instruction_def)
 apply(clarsimp simp add: instruction_simps simp del: M_def Cmem_def)
 apply(simp add: cut_data_def)
+ apply(simp add: sent_data_simps contexts_as_set_pc_change)
 apply(drule sent_data_means)
  apply(arith)
 apply(simp)
-apply(rule conjI)
- apply(erule_tac P="_ \<and>* _" in back_subst)
- defer
-apply(simp add: cut_data_def)
-
-(* lemma inst_callvalue_sound:
-    "triple_inst_sem
-      (\<langle> h \<le> 1023 \<and> Gbase \<le> g \<and> m \<ge> 0\<rangle> \<and>*
-       continuing \<and>* program_counter n \<and>*
-       memory_usage m \<and>* stack_height h \<and>* sent_value w \<and>*
-       gas_pred g \<and>* rest)
-      (n, Info CALLVALUE)
-      (program_counter (n + 1) \<and>*
-       continuing \<and>* memory_usage m \<and>* sent_value w \<and>*
-       stack_height (Suc h) \<and>* gas_pred (g - Gbase) \<and>*
-       stack h w \<and>* rest)"
-apply(inst_sound_basic)
-done *)
+apply(erule back_subst[where P="_\<and>*_"])
+apply(auto simp add: as_set_simps)
+done
 
 lemma inst_arith_2_1_low_sound:
 notes
@@ -717,32 +760,408 @@ apply(rule conjI)
 apply(simp add: rev_lookup)
 done
 
+lemma inst_dup_sem:
+"triple_inst_sem
+  (\<langle> h \<le> 1023 \<and> unat n < h \<and> g \<ge> Gverylow \<and> m \<ge> 0\<rangle> \<and>*
+   stack_height h \<and>* stack (h - (unat n) - 1) w \<and>*
+   memory_usage m \<and>* program_counter k \<and>*
+   gas_pred g \<and>* continuing \<and>* rest )
+  (k, Dup n)
+  (program_counter (k + 1) \<and>* gas_pred (g - Gverylow) \<and>*
+   stack_height (h + 1) \<and>* stack (h - (unat n) - 1) w \<and>* stack h w \<and>*
+   memory_usage m \<and>* continuing \<and>* rest )"
+apply(simp add: triple_inst_sem_def program_sem.simps as_set_simps sep_conj_ac)
+apply(clarify)
+apply(sep_simp simp: fun_sep_simps; simp)
+apply(simp split: instruction_result.splits)
+apply(simp add: vctx_next_instruction_def)
+apply(clarsimp simp add: instruction_simps)
+apply((sep_simp simp: fun_sep_simps)+)
+apply(simp add: rev_lookup)
+apply(subst conj_commute)
+apply(rule context_conjI)
+ apply(arith)
+apply(erule_tac P="(_ \<and>* _)" in back_subst)
+apply(auto simp add: as_set_simps)
+done
+
+lemma variable_context_pc_change:
+"variable_ctx_as_set (x1\<lparr>vctx_pc := vctx_pc x1 + 1\<rparr>) = insert (PcElm (vctx_pc x1 + 1)) (variable_ctx_as_set x1) - {PcElm (vctx_pc x1)}"
+by (auto simp add: as_set_simps)
+
+lemma inst_mload_sound :
+notes
+  unat_bintrunc[simp del]
+shows
+"triple_inst_sem
+  (\<langle> h \<le> 1023  \<and> g \<ge> Gverylow - Cmem memu + Cmem (M memu memaddr 32) \<and> memu \<ge> 0 \<and>
+    length (word_rsplit v::byte list) = unat (32::w256)\<rangle> \<and>*
+   stack h memaddr \<and>* stack_height (h+1) \<and>* program_counter n \<and>*   
+   memory_usage memu \<and>* memory memaddr v \<and>* gas_pred g \<and>* continuing \<and>* rest)
+  (n, Memory MLOAD)
+  (program_counter (n + 1) \<and>* stack_height (h + 1) \<and>* stack h v \<and>*
+   memory memaddr v \<and>* memory_usage (M memu memaddr 32) \<and>*
+   gas_pred (g - Gverylow + Cmem memu - Cmem (M memu memaddr 32)) \<and>*
+   continuing \<and>* rest)"
+apply(simp add: triple_inst_sem_def program_sem.simps as_set_simps)
+apply(clarify)
+apply(simp add: memory_def)
+apply(sep_simp simp: pure_sep, (erule conjE)+)
+apply(sep_simp simp: fun_sep_simps; simp)
+apply(simp split: instruction_result.splits)
+apply(simp add: vctx_next_instruction_def)
+apply(clarsimp)
+apply(simp add: instruction_simps vctx_stack_default_def del: Cmem_def M_def)
+apply((sep_simp simp: fun_sep_simps)+)
+apply(simp add: variable_context_pc_change)
+apply(simp add: read_word_from_bytes_def unat_bintrunc byte_list_fill_right_def word_rcat_rsplit)
+apply(erule_tac P="(_ \<and>* _)" in back_subst)
+apply(auto simp add: as_set_simps)
+done
+
+(*MSTORE*)
+lemma store_list_mem_gt:
+"unat (p - pos) \<ge> length lst \<Longrightarrow>
+ store_byte_list_memory pos lst orig p = orig p"
+apply(induction lst arbitrary: pos)
+ apply(simp add: store_byte_list_memory_def)
+apply(subst store_byte_list_memory_def)
+apply(simp split: option.splits)
+done
+
+lemma store_list_mem_ls:
+"unat (p - pos) < length lst \<Longrightarrow>
+ store_byte_list_memory pos lst orig p = lst ! unat (p-pos)"
+apply(induction lst arbitrary: pos)
+ apply(simp add: store_byte_list_memory_def)
+apply(subst store_byte_list_memory_def)
+apply(simp split: option.splits)
+done
+
+lemma tmp003:
+"n < 35 \<Longrightarrow> unat (x - p::w256) < n \<Longrightarrow> unat (x - p + 2) < Suc (Suc n)"
+apply(subgoal_tac "unat (x-p+2)-2 < n")
+ apply(auto)[1]
+ using unat_add_lem
+apply(insert unat_add_lem[where x="x-p" and y=2])[1]
+apply(drule iffD1)
+ apply(auto)
+done
+
+lemma  unat_minus_Suc:
+" 0 < unat (x - pos::w256) \<Longrightarrow> unat (x - pos) = Suc (unat (x - (pos + 1)))"
+apply(subgoal_tac "unat (1+ (x - (pos + 1))) = Suc (unat (x - (pos + 1)))")
+ apply(auto)[1]
+apply(rule unatSuc)
+apply(simp add: unat_gt_0)
+done
+
+lemma store_blst_mem_append:
+notes
+  if_split[split del]
+shows
+"length lst < 32 \<Longrightarrow>
+store_byte_list_memory pos (a # lst) orig =
+((store_byte_list_memory (pos+1) lst orig)(pos:=a))"
+apply(rule ext)
+apply(induction lst arbitrary: pos a)
+ apply(case_tac "unat (x - pos) < length [a]")
+  apply(clarsimp simp add: store_list_mem_ls unat_eq_0)
+ apply(clarsimp split: if_split)
+ apply(rule conjI)
+  apply(simp add: unat_gt_0)
+ apply(simp add: store_list_mem_gt)
+apply(case_tac "x=pos")
+ apply(simp add: store_list_mem_ls)
+apply(drule_tac x=x in meta_spec)
+apply(drule_tac x="pos + 1" and y="a" in meta_spec2)
+apply(drule meta_mp)
+ apply(simp)
+apply(clarsimp)
+apply(case_tac "x=pos+1")
+ apply(simp add: store_list_mem_ls)
+apply(clarsimp)
+apply(case_tac "unat (x-pos) < length (aa#a#lst)")
+ apply(simp add: store_list_mem_ls)
+ apply(drule sym)
+ apply(simp)
+ apply(subst store_list_mem_ls)
+  apply(simp)
+  apply(cut_tac pos=pos and x=x in unat_minus_Suc)
+   apply(simp add: unat_gt_0)
+  apply(simp)
+ apply(insert unatSuc)[1]
+ apply(drule_tac x="x - (pos + 1)" in meta_spec)
+ apply(simp)
+apply(simp add: store_list_mem_gt)
+apply(drule sym, simp)
+apply(subst store_list_mem_gt; simp)
+apply(simp add: not_less_eq)
+apply(cut_tac pos=pos and x=x in unat_minus_Suc)
+ apply(simp add: unat_gt_0)
+apply(simp)
+done
+
+lemma memory_as_set_append:
+"memory_as_set
+ (z(memaddr:=a)) =
+insert (MemoryElm (memaddr, a))
+(memory_as_set z - {MemoryElm (memaddr, z memaddr)})"
+apply(simp add: memory_as_set_def)
+apply(rule subset_antisym)
+ apply(rule subsetI)
+ apply(case_tac "x = (MemoryElm (memaddr, a))")
+  apply(clarsimp)
+ apply(clarsimp)
+apply(rule subsetI)
+apply(clarsimp)
+apply(erule disjE)
+ apply(simp)
+apply(erule conjE)
+apply(erule exE)
+apply(rule_tac x=aa in exI)
+apply(clarsimp)
+done
+
+lemma memory_elm_in_vctx:
+"(MemoryElm (a,b)
+   \<in> variable_ctx_as_set v) =
+(MemoryElm (a,b)
+   \<in> memory_as_set (vctx_memory v))"
+by (auto simp add: as_set_simps)
+
+lemma memory_range_elms_in_vctx:
+"(memory_range_elms memaddr lst
+   \<subseteq> variable_ctx_as_set v) =
+(memory_range_elms memaddr lst
+  \<subseteq> memory_as_set (vctx_memory v))"
+by (auto simp add: as_set_simps)
+
+(* lemma uniq_stateelm_memory:
+"(\<forall>h v. MemoryElm (h, v) \<in> memory_as_set m \<longrightarrow> (\<forall>v'. MemoryElm (h, v') \<in> memory_as_set m \<longrightarrow> v' = v))"
+by(simp add: as_set_simps) *)
+
+lemma word_of_int_n0:
+"0 < k \<Longrightarrow> k < 2^256\<Longrightarrow> (word_of_int k::w256) \<noteq> 0"
+apply(subst zero_word_def)
+apply(subst word_of_int_inj; simp)
+done
+
+lemma ind_memory_rg_elms:
+"k > 0 \<Longrightarrow> k < 2^256 - int (length lst) \<Longrightarrow>
+MemoryElm (m, b) \<notin> memory_range_elms (m + word_of_int k) lst"
+apply(induction lst arbitrary:  k)
+ apply(simp)
+apply(rule notI)
+apply(simp)
+apply(simp add:word_of_int_n0)
+apply(drule_tac x="k+1" in meta_spec)
+apply(simp add: wi_hom_syms(5))
+apply(simp add: word_succ_p1)
+apply(subgoal_tac "m + word_of_int k + 1=m + (word_of_int k + 1)"; simp)
+done
+
+lemma memory_range_elms_in_store:
+"length lst \<le> unat (32::w256) \<Longrightarrow>
+memory_range_elms memaddr lst
+   \<subseteq> memory_as_set
+       (store_byte_list_memory memaddr lst mem)"
+apply(induction lst arbitrary: memaddr; simp)
+apply(rule context_conjI)
+ apply(simp add: store_byte_list_memory_def memory_as_set_def)
+apply(clarsimp)
+apply(case_tac x; clarsimp)
+apply(subst store_blst_mem_append, simp)
+apply(simp add:  memory_as_set_append)
+apply(case_tac "aa=memaddr")
+ apply(simp)
+ apply(cut_tac m=memaddr and k=1 and lst=lst and b=b in ind_memory_rg_elms; simp)
+apply(simp)
+apply(drule_tac x="memaddr + 1" in meta_spec)
+apply(drule rev_subsetD; simp)
+done
+
+lemma diff_set_commute_sing:
+"A - {b} - {c} = A - {c} - {b}"
+by(auto)
+
+lemma diff_memory_elms_commute_fst:
+"A - {b} - memory_range_elms x y = A - memory_range_elms x y - {b}"
+apply(induction y arbitrary: x; simp)
+apply(rule subset_antisym; rule subsetI)
+ apply(simp add: diff_set_commute_sing[where b="MemoryElm _"])+
+done
+
+lemma diff_memory_elms_commute_end:
+"A - memory_range_elms x y - {b} = A - {b} - memory_range_elms x y"
+apply(induction y arbitrary: x; simp)
+apply(rule subset_antisym; rule subsetI)
+ apply(simp add: diff_set_commute_sing[where b="MemoryElm _"])+
+done
+
+lemma memory_elms_out_of_range:
+"length v \<le> unat (a - m) \<Longrightarrow>
+ MemoryElm (a, b) \<notin> memory_range_elms m v"
+apply(induction v arbitrary: m; simp)
+apply(case_tac "a=m"; simp)
+apply(drule_tac x="m+1" in meta_spec)
+apply(drule meta_mp)
+ apply(cut_tac pos=m in unat_minus_Suc[where x=a]; simp)
+apply(simp)
+done
+
+lemma memory_elms_in_range:
+"length lst < 2^256 \<Longrightarrow>
+(unat (a - m) < length lst \<and>
+ lst ! unat (a - m) = x ) =
+ (MemoryElm (a, x) \<in> memory_range_elms m lst)"
+apply(rule iffI)
+apply(induction lst arbitrary: m; simp)
+apply(case_tac "a=m"; simp)
+apply(drule_tac x="m+1" in meta_spec)
+apply(drule meta_mp)
+  apply(cut_tac pos=m in unat_minus_Suc[where x=a];simp add: unat_gt_0)
+ apply(cut_tac pos=m in unat_minus_Suc[where x=a];simp add: unat_gt_0)
+apply(induction lst arbitrary: m; simp)
+apply(case_tac "a=m"; simp)
+ apply(erule disjE, simp)
+ apply(cut_tac m=m and k=1 and lst=lst and b=x in ind_memory_rg_elms; simp)
+apply(drule_tac x="m+1" in meta_spec)
+apply(drule meta_mp)
+  apply(cut_tac pos=m in unat_minus_Suc[where x=a];simp add: unat_gt_0)
+ apply(cut_tac pos=m in unat_minus_Suc[where x=a];simp add: unat_gt_0)
+done
+
+lemma vctx_memory_store_memory_set_eq:
+"memory_range_elms memaddr (word_rsplit old_v)
+    \<subseteq> memory_as_set (vctx_memory x1) \<Longrightarrow>
+    length (word_rsplit old_v::byte list) =  length (word_rsplit v::byte list) \<Longrightarrow>
+    memory_range_elms memaddr (word_rsplit v)
+    \<subseteq> memory_as_set (store_word_memory memaddr v (vctx_memory x1)) \<Longrightarrow>
+    contexts_as_set
+     (x1\<lparr>vctx_memory := store_word_memory memaddr v (vctx_memory x1)\<rparr>)
+     co_ctx -
+    memory_range_elms memaddr (word_rsplit v) =
+    contexts_as_set x1 co_ctx -
+    memory_range_elms memaddr (word_rsplit old_v)"
+apply(simp add: contexts_as_set_def)
+apply(rule subset_antisym; rule subsetI)
+apply(case_tac "\<exists>a b. x = MemoryElm (a,b)")
+apply(simp)
+apply(erule exE)+
+apply(simp del:memory_element_means add: memory_elm_in_vctx)
+apply(erule conjE)
+
+ apply(case_tac x; clarsimp)
+ apply(simp add: store_word_memory_def)
+ apply(case_tac "unat (a - memaddr) \<ge> length (word_rsplit v::byte list)")
+  apply(subst store_list_mem_gt; simp)
+  apply(rule memory_elms_out_of_range; simp)
+ apply(simp add: not_le)
+ apply(subst store_list_mem_ls, simp)
+ apply(insert memory_elms_in_range)[1]
+ apply(drule_tac x="(word_rsplit v::byte list)" and y=a in meta_spec2)
+ apply(drule_tac x=memaddr and y="word_rsplit v ! unat (a - memaddr)" in meta_spec2; simp)
+ apply(case_tac "word_rsplit v ! unat (a - memaddr) = vctx_memory x1 a")
+  apply(simp)
+ using[[show_types]]
+ apply()
+find_theorems memory_range_elms name:local
+apply(rule arg_cong[where f="\<lambda>(u, v). _ \<union> u - v"])
+apply(auto simp add: as_set_simps
+sorry
+
+lemma memory_in_mem_as_set:
+"x \<in> memory_as_set m \<Longrightarrow> \<exists>a b. x= MemoryElm (a,b)"
+by(auto simp add: as_set_simps)
+
+
+lemma inst_mstore_sound :
+notes
+  unat_bintrunc[simp del]
+shows
+"triple_inst_sem
+  (\<langle> h \<le> 1022 \<and> g \<ge> Gverylow - Cmem memu + Cmem (M memu memaddr 32) \<and> memu \<ge> 0 \<and>
+    length (word_rsplit old_v::byte list) = unat (32::w256) \<and>
+    length (word_rsplit v::byte list) = unat (32::w256)\<rangle> \<and>*
+   stack (h+1) memaddr \<and>* stack h v \<and>* stack_height (h+2) \<and>*
+   program_counter n \<and>* memory_usage memu \<and>*
+   memory memaddr old_v \<and>* gas_pred g \<and>* continuing \<and>* rest)
+  (n, Memory MSTORE)
+  (program_counter (n + 1) \<and>* stack_height h \<and>* memory memaddr v \<and>* 
+   gas_pred (g - Gverylow + Cmem memu - Cmem (M memu memaddr 32)) \<and>*
+   memory_usage (M memu memaddr 32) \<and>* continuing \<and>* rest)"
+apply(simp add: triple_inst_sem_def program_sem.simps as_set_simps)
+apply(clarify)
+apply(simp add: memory_def)
+apply(sep_simp simp: pure_sep, (erule conjE)+)
+apply(sep_simp simp: fun_sep_simps; simp, (erule conjE)?)+
+apply(simp split: instruction_result.splits)
+apply(simp add: vctx_next_instruction_def)
+apply(clarsimp simp add: rev_nth)
+apply(simp add: instruction_simps vctx_stack_default_def del: Cmem_def M_def)
+apply(subst conj_commute, rule context_conjI)
+ apply(simp add: store_word_memory_def memory_range_elms_in_vctx)
+ apply(simp only: memory_range_elms_in_store)
+apply(erule_tac P="(_ \<and>* _)" in back_subst)
+apply(simp add: diff_set_commute_sing[where c="ContinuingElm True"])
+apply(simp add: diff_memory_elms_commute_fst  memory_range_elms_in_vctx)
+apply(rule subst[OF vctx_memory_store_memory_set_eq[where old_v=old_v and v=v]]; simp?)
+apply(simp add: diff_memory_elms_commute_end)
+apply(rule arg_cong[where f="\<lambda>u. u - memory_range_elms _ _"])
+apply(simp add: as_set_simps del: memory_as_set_def)
+apply(rule subset_antisym; rule subsetI)
+ apply(case_tac "\<exists>a b. x= MemoryElm (a,b)"; clarsimp)
+ apply(erule disjE, clarsimp)+
+ apply(clarsimp)
+ apply(erule disjE, clarsimp)+
+ apply(drule memory_in_mem_as_set; simp)
+ apply(erule disjE, clarsimp)+
+ apply(clarsimp)
+apply(case_tac "\<exists>a b. x= MemoryElm (a,b)"; clarsimp)
+apply(erule disjE, clarsimp)+
+apply(drule memory_in_mem_as_set; simp)
+apply(erule disjE, clarsimp)+
+apply(clarsimp)
+done
+
 lemma triple_inst_soundness:
 notes
   sep_lc[simp del]
   if_split[split del]
 shows
   "triple_inst p i q \<Longrightarrow> triple_inst_sem p i q"
-  apply(induction rule:triple_inst.induct)
-      apply(erule triple_inst_arith.cases; clarsimp)
-          apply(simp add: inst_arith_2_1_low_sound)
-         apply(simp add: inst_arith_2_1_verylow_sound)
-        apply(simp add: inst_arith_3_1_sound)
-			 apply(inst_sound_basic simp: iszero_stack_def)
-      apply(erule triple_inst_bits.cases; clarsimp)
+ apply(induction rule:triple_inst.induct)
+            apply(erule triple_inst_arith.cases; clarsimp)
+               apply(simp add: inst_arith_2_1_low_sound)
+              apply(simp add: inst_arith_2_1_verylow_sound)
+             apply(simp add: inst_arith_3_1_sound)
+            apply(inst_sound_basic simp: iszero_stack_def)
+           apply(erule triple_inst_bits.cases; clarsimp)
+            apply(inst_sound_basic)
+           apply(simp add: inst_bits_2_1_sound)
+          apply(erule triple_inst_info.cases; clarsimp)
+          apply(inst_sound_basic)
+         apply(erule triple_inst_log.cases; clarsimp)
+         defer(*LOG0*)
+        apply(erule triple_inst_memory.cases; clarsimp)
+          apply(simp only: inst_mload_sound)
+         apply(simp only: inst_mstore_sound) (*MSTORE*)
+        defer (*CODECOPY*)
+       apply(erule triple_inst_misc.cases; clarsimp)
+        apply(simp only: inst_stop_sem)
+       apply(simp only: inst_return_sem) defer
+      apply(erule triple_inst_pc.cases; clarsimp)
        apply(inst_sound_basic)
-      apply(simp add: inst_bits_2_1_sound)
-     apply(erule triple_inst_misc.cases; clarsimp)
-     apply(simp only: inst_stop_sem)
-    apply(erule triple_inst_pc.cases; clarsimp)
-     apply(inst_sound_basic)
-    apply(inst_sound_basic simp: pc_def)
-   apply(erule triple_inst_stack.cases; clarsimp)
-    apply(inst_sound_basic)
-   apply(inst_sound_basic)
-  apply(simp add: inst_swap_sound)
- apply(simp add: inst_strengthen_pre_sem)
-apply(simp add: inst_false_pre_sem)
+      apply(inst_sound_basic simp: pc_def)
+     apply(erule triple_inst_stack.cases; clarsimp)
+       apply(inst_sound_basic)
+      apply(inst_sound_basic)
+     apply(simp only: inst_calldataload_sem) defer
+    apply(simp add: inst_swap_sound)
+   apply(simp only: inst_dup_sem)
+  apply(simp add: inst_strengthen_pre_sem)
+ apply(simp add: inst_false_pre_sem)
 done
 
 (* Define the semantic of triple_seq and prove it sound *)
@@ -1988,13 +2407,19 @@ lemma program_sem_failure:
  by(induction k; simp add: program_sem.simps)
 
 lemma pc_before_inst:
+notes
+  sep_lc[simp del]
+shows
 "triple_inst pre x post \<Longrightarrow>
 x = (n, i) \<Longrightarrow>
 pre s \<and> uniq_stateelm s \<Longrightarrow>
 PcElm n \<in> s"
  apply(induct rule: triple_inst.induct; clarsimp)
-       apply(erule triple_inst_arith.cases; clarsimp; sep_simp simp: pure_sep sep_fun_simps; simp)
-      apply(erule triple_inst_bits.cases; clarsimp; sep_simp simp: pure_sep sep_fun_simps; simp)
+sorry
+          apply(erule triple_inst_arith.cases; clarsimp; sep_simp simp: pure_sep sep_fun_simps; simp)
+         apply(erule triple_inst_bits.cases; clarsimp; sep_simp simp: pure_sep sep_fun_simps; simp)
+        apply(erule triple_inst_info.cases; clarsimp; sep_simp simp: pure_sep sep_fun_simps; simp)
+       apply(erule triple_inst_log.cases; clarsimp; sep_simp simp: pure_sep sep_fun_simps; simp)
      apply(erule triple_inst_misc.cases; clarsimp; sep_simp simp: pure_sep sep_fun_simps; simp)
     apply(erule triple_inst_pc.cases; clarsimp; sep_simp simp: pure_sep sep_fun_simps; simp)
    apply(erule triple_inst_stack.cases; clarsimp; sep_simp simp: pure_sep sep_fun_simps; simp)
