@@ -40,8 +40,34 @@ schematic_goal c_val:
 
 lemmas strengthen_insts =
 inst_strengthen_pre[OF inst_stack[OF inst_push_n]]
+inst_strengthen_pre[OF inst_stack[OF inst_pop]]
+inst_strengthen_pre[OF inst_stack[OF inst_calldataload]]
+inst_strengthen_pre[OF inst_swap]
+inst_strengthen_pre[OF inst_dup]
+inst_strengthen_pre[OF inst_memory[OF inst_mstore]]
+inst_strengthen_pre[OF inst_memory[OF inst_mload]]
+inst_strengthen_pre[OF inst_info[OF inst_callvalue]]
 inst_strengthen_pre[OF inst_pc[OF inst_jumpdest]]
+inst_strengthen_pre[OF inst_pc[OF inst_instPC]]
 inst_strengthen_pre[OF inst_misc[OF inst_stop]]
+inst_strengthen_pre[OF inst_misc[OF inst_return]]
+inst_strengthen_pre[OF inst_arith[OF inst_arith_mul]]
+inst_strengthen_pre[OF inst_arith[OF inst_arith_div]]
+inst_strengthen_pre[OF inst_arith[OF inst_arith_mod]]
+inst_strengthen_pre[OF inst_arith[OF inst_arith_add]]
+inst_strengthen_pre[OF inst_arith[OF inst_arith_sub]]
+inst_strengthen_pre[OF inst_arith[OF inst_arith_gt]]
+inst_strengthen_pre[OF inst_arith[OF inst_arith_eq]]
+inst_strengthen_pre[OF inst_arith[OF inst_arith_lt]]
+inst_strengthen_pre[OF inst_arith[OF inst_arith_addmod]]
+inst_strengthen_pre[OF inst_arith[OF inst_arith_mulmod]]
+inst_strengthen_pre[OF inst_arith[OF inst_iszero]]
+inst_strengthen_pre[OF inst_bits[OF inst_bits_not]]
+inst_strengthen_pre[OF inst_bits[OF inst_bits_and]]
+inst_strengthen_pre[OF inst_bits[OF inst_bits_and]]
+inst_strengthen_pre[OF inst_bits[OF inst_bits_or]]
+inst_strengthen_pre[OF inst_bits[OF inst_bits_xor]]
+inst_strengthen_pre[OF inst_bits[OF inst_bits_byte]]
 
 lemma instantiate_emp:
 "P sd \<Longrightarrow> (P \<and>* emp) sd"
@@ -57,13 +83,21 @@ clarsimp;
   (erule instantiate_emp)?,
 (simp)
 
+method sep_imp_solve_cancel_simp =
+clarsimp?;
+(rule conjI),
+  (clarsimp simp add: word_rcat_def)?,
+  (sep_cancel, simp?)+,
+  (erule instantiate_emp)?,
+(simp)
+
 method triple_seq_vcg =
   (rule seq_inst; ((rule strengthen_insts) | triple_seq_vcg)?) |
   rule seq_empty
 
 method triple_jumpi_vcg =
  ((rule blocks_jumpi; (rule refl)?),
-  triple_seq_vcg, sep_imp_solve+); simp add: bin_rcat_def
+  triple_seq_vcg, (sep_imp_solve_cancel_simp|sep_imp_solve)+); simp add: bin_rcat_def
 
 method triple_jump_vcg =
  ((rule blocks_jump; (rule refl)?),
