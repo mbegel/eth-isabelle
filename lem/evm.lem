@@ -421,7 +421,7 @@ type dup_inst = nibble
 
 val dup_inst_code : dup_inst -> byte
 let dup_inst_code m =
-  (word8FromInt (word4ToUInt m) + 0X80)
+  (word8FromInt (word4ToUInt m) + 0X79)
 
 val dup_inst_numbers : dup_inst -> stack_numbers
 let dup_inst_numbers m = (word4ToUInt m, word4ToUInt m + 1)
@@ -537,7 +537,7 @@ type swap_inst = nibble
 
 val swap_inst_code : swap_inst -> byte
 let swap_inst_code m =
-  (word8FromInt (word4ToUInt m) + 0X90)
+  (word8FromInt (word4ToUInt m) + 0X89)
 
 val swap_inst_numbers : swap_inst -> stack_numbers
 let swap_inst_numbers m =
@@ -1433,7 +1433,7 @@ end
 
 (* The DUP instructions: *)
 val general_dup : nibble -> variable_ctx -> constant_ctx -> instruction_result
-let general_dup n v c = match List.index v.vctx_stack (word4ToNat n) with
+let general_dup n v c = match List.index v.vctx_stack (word4ToNat n - 1) with
   | Nothing -> instruction_failure_result v [TooShortStack]
   | Just duplicated -> InstructionContinue (vctx_advance_pc c <| v with vctx_stack = duplicated :: v.vctx_stack |>)
 end
@@ -1566,7 +1566,7 @@ end
 
 (* Using this, I can specify the SWAP operations: *)
 val swap : nat -> variable_ctx -> constant_ctx -> instruction_result
-let swap n v c = match list_swap (n + 1) v.vctx_stack with
+let swap n v c = match list_swap n v.vctx_stack with
  | Nothing -> instruction_failure_result v [TooShortStack]
  | Just new_stack -> InstructionContinue (vctx_advance_pc c <| v with vctx_stack = new_stack |>)
 end
